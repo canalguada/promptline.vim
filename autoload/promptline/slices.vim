@@ -52,6 +52,11 @@ fun! promptline#slices#git_status(...)
           \'function_body': readfile(globpath(&rtp, "autoload/promptline/slices/git_status.sh"))}
 endfun
 
+fun! promptline#slices#git_branch_status_sha(...)
+  return { 'function_name': '__promptline_git_branch_status_sha',
+          \'function_body': readfile(globpath(&rtp, "autoload/promptline/slices/git_branch_status_sha.sh"))}
+endfun
+
 " internally used to wrap any string, like \w, \h, $(command) with the given colors / separators
 fun! promptline#slices#wrapper(...)
   return {
