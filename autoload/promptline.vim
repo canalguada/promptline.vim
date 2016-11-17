@@ -10,15 +10,18 @@ let s:SHELL_BG_CODE = 48
 let s:default_theme = 'powerlineclone'
 let s:default_preset = 'powerlineclone'
 
+let s:default_multiline = 1
+
 fun! promptline#snapshot(overwrite, file, ...) abort
   let input_theme = get(a:, 1, get(g:, 'promptline_theme', s:default_theme))
   let input_preset = get(a:, 2, get(g:, 'promptline_preset', s:default_preset))
+  let multiline = get(a:, 3, get(g:, 'promptline_multiline', s:default_multiline))
 
   try
     let file = s:validate_file(a:overwrite, a:file)
     let theme = promptline#themes#load_theme(input_theme)
     let preset = promptline#presets#load_preset(input_preset)
-    call promptline#create_snapshot(file, theme, preset)
+    call promptline#create_snapshot(file, theme, preset, multiline)
   catch /^promptline:/
     echohl ErrorMsg | echomsg v:exception | echohl None
   endtry
@@ -47,7 +50,7 @@ fun! s:fg(color)
   return printf('"${wrap}%d;5;%d${end_wrap}"', s:SHELL_FG_CODE, a:color)
 endfun
 
-fun! promptline#create_snapshot(file, theme, preset) abort
+fun! promptline#create_snapshot(file, theme, preset, multiline) abort
   let prompt = {
         \'functions': {},
         \'left_sections': [],
@@ -61,13 +64,16 @@ fun! promptline#create_snapshot(file, theme, preset) abort
   let text_attribute_modifiers      = s:get_text_attribute_modifiers()
   let color_variables               = s:get_color_variables(a:theme, a:preset)
   let function_definitions          = s:get_function_definitions(prompt)
-  let prompt_variables_installation = s:get_prompt_variables_installation(prompt)
+  let prompt_variables_installation = s:get_prompt_variables_installation(prompt, a:multiline)
   let prompt_installation           = s:get_prompt_installation()
 
   let snapshot_lines =
         \ [ '#'] +
         \ [ '# This shell prompt config file was created by promptline.vim'] +
         \ [ '#'] +
+        \ [''] +
+        \ [ '[[ -z $(env | grep -i konsole) ]] && KONSOLE=0 || KONSOLE=1'] +
+        \ [''] +
         \ function_definitions +
         \ ['function __promptline {'] +
         \ ['  local last_exit_code="${PROMPTLINE_LAST_EXIT_CODE:-$?}"'] +
@@ -98,20 +104,45 @@ fun! s:get_shell_escape_codes()
         \'  local wrap="$noprint$esc" end_wrap="$end_esc$end_noprint"']
 endfun
 
-fun! s:get_prompt_variables_installation(prompt)
-  return [
-        \'  if [[ -n ${ZSH_VERSION-} ]]; then',
+fun! s:get_prompt_variables_installation(prompt, multiline)
+  if a:multiline != 0
+  let lines = [
+        \"  NEWLINE_PROMPT=$([ $EUID -eq 0 ] && echo '\\n # ' || echo '\\n $ ')"]
+  else
+  let lines = []
+  endif
+  let lines += [
+        \'  if [[ -n ${ZSH_VERSION-} ]]; then']
+  if a:multiline != 0
+  let lines += [
+        \'    local LC_ALL="" LC_CTYPE="en_US.UTF-8" # Set the right locale to protect special characters',
+        \"    RPROMPT_PREFIX='%{'$'\\e[1A''%}' # one line up",
+        \"    RPROMPT_SUFFIX='%{'$'\\e[1B''%}' # one line down",
+        \'    PROMPT="' . join(a:prompt.left_sections, '') . '$(echo ${NEWLINE_PROMPT})"',
+        \'    RPROMPT="${RPROMPT_PREFIX}' . join(a:prompt.right_sections, '') . '${RPROMPT_SUFFIX}"']
+  else
+  let lines += [
         \'    PROMPT="' . join(a:prompt.left_sections, '') . '"',
-        \'    RPROMPT="' . join(a:prompt.right_sections, '') . '"',
+        \'    RPROMPT="' . join(a:prompt.right_sections, '') . '"']
+  endif
+  let lines += [
         \'  elif [[ -n ${FISH_VERSION-} ]]; then',
         \'    if [[ -n "$1" ]]; then',
         \'      [[ "$1" = "left" ]] && __promptline_left_prompt || __promptline_right_prompt',
         \'    else',
         \'      __promptline_ps1',
         \'    fi',
-        \'  else',
-        \'    PS1="' . join(a:prompt.sections, '') . '"',
+        \'  else']
+  if a:multiline != 0
+  let lines += [
+        \'    PS1="' . join(a:prompt.sections, '') . '${NEWLINE_PROMPT}"']
+  else
+  let lines += [
+        \'    PS1="' . join(a:prompt.sections, '') . '"']
+  endif
+  let lines += [
         \'  fi']
+  return lines
 endfun
 
 fun! s:get_color_variables( theme, preset )
